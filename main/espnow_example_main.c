@@ -36,8 +36,12 @@ static void on_pairing_event(pairing_event_t event, const uint8_t *mac_addr);
 
 #ifdef CONFIG_DEVICE_ROLE_MASTER
 static void master_init(void);
-static void on_pairing_button(gpio_num_t gpio_num, button_event_t event, uint32_t press_duration);
 static void on_control_button(gpio_num_t gpio_num, button_event_t event, uint32_t press_duration);
+#endif
+
+#ifdef CONFIG_DEVICE_ROLE_SLAVE
+static void slave_init(void);
+static void on_pairing_button(gpio_num_t gpio_num, button_event_t event, uint32_t press_duration);
 #endif
 
 /**
@@ -115,35 +119,14 @@ static void on_pairing_event(pairing_event_t event, const uint8_t *mac_addr)
             led_rgb_clear();
             led_rgb_refresh();
             break;
+            
+        case PAIRING_EVENT_UNPAIRED:
+            ESP_LOGI(TAG, "Device unpaired: "MACSTR, MAC2STR(mac_addr));
+            break;
     }
 }
 
 #ifdef CONFIG_DEVICE_ROLE_MASTER
-
-/**
- * @brief Pairing button callback (Master only)
- */
-static void on_pairing_button(gpio_num_t gpio_num, button_event_t event, uint32_t press_duration)
-{
-    ESP_LOGI(TAG, "Pairing button event: %d, duration: %lu ms", event, press_duration);
-    
-    if (event == BUTTON_EVENT_LONG_PRESS) {
-        ESP_LOGI(TAG, "Pairing button long press detected (%lu ms)", press_duration);
-        
-        if (pairing_is_active()) {
-            ESP_LOGW(TAG, "Pairing already in progress");
-            return;
-        }
-        
-        ESP_LOGI(TAG, "Starting pairing process...");
-        esp_err_t ret = pairing_master_start();
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Pairing initiated");
-        } else {
-            ESP_LOGE(TAG, "Failed to start pairing: %s", esp_err_to_name(ret));
-        }
-    }
-}
 
 /**
  * @brief Control button callback (Master only)
@@ -214,15 +197,6 @@ static void master_init(void)
     };
     ESP_ERROR_CHECK(pairing_init(&pairing_config));
     
-    // Initialize Pairing Button (GPIO1)
-    button_config_t pairing_btn_config = {
-        .gpio_num = CONFIG_GPIO_PAIRING_BUTTON,
-        .active_level = true,  // Active high (pull-down, button connects to 3.3V)
-        .long_press_time_ms = CONFIG_PAIRING_LONG_PRESS_TIME,
-        .callback = on_pairing_button,
-    };
-    ESP_ERROR_CHECK(button_init(&pairing_btn_config));
-    
     // Initialize Control Button (GPIO7)
     button_config_t control_btn_config = {
         .gpio_num = CONFIG_GPIO_CONTROL_BUTTON,
@@ -239,15 +213,51 @@ static void master_init(void)
     led_rgb_refresh();
     
     ESP_LOGI(TAG, "Master initialized successfully");
-    ESP_LOGI(TAG, "- Pairing button: GPIO%d (long press %d ms)", 
-             CONFIG_GPIO_PAIRING_BUTTON, CONFIG_PAIRING_LONG_PRESS_TIME);
     ESP_LOGI(TAG, "- Control button: GPIO%d", CONFIG_GPIO_CONTROL_BUTTON);
     ESP_LOGI(TAG, "- RGB LED: GPIO%d", CONFIG_GPIO_LED_RGB);
+    ESP_LOGI(TAG, "- Pairing: Auto-respond to nearby slaves (RSSI > %d dBm)", CONFIG_PAIRING_RSSI_THRESHOLD);
 }
 
 #else // CONFIG_DEVICE_ROLE_SLAVE
 
 static void slave_init(void);
+
+/**
+ * @brief Pairing button callback (Slave only)
+ */
+static void on_pairing_button(gpio_num_t gpio_num, button_event_t event, uint32_t press_duration)
+{
+    ESP_LOGI(TAG, "Pairing button event: %d, duration: %lu ms", event, press_duration);
+    
+    if (event == BUTTON_EVENT_LONG_PRESS) {
+        ESP_LOGI(TAG, "Pairing button long press detected (%lu ms)", press_duration);
+        
+        if (pairing_is_paired()) {
+            // Already paired - unpair from master
+            ESP_LOGI(TAG, "Slave is paired, initiating unpair...");
+            esp_err_t ret = pairing_slave_unpair();
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Unpaired successfully");
+            } else {
+                ESP_LOGE(TAG, "Failed to unpair: %s", esp_err_to_name(ret));
+            }
+        } else {
+            // Not paired - start pairing process
+            if (pairing_is_active()) {
+                ESP_LOGW(TAG, "Pairing already in progress");
+                return;
+            }
+            
+            ESP_LOGI(TAG, "Slave not paired, starting pairing process...");
+            esp_err_t ret = pairing_slave_start();
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Pairing initiated");
+            } else {
+                ESP_LOGE(TAG, "Failed to start pairing: %s", esp_err_to_name(ret));
+            }
+        }
+    }
+}
 
 /**
  * @brief Initialize Slave device
@@ -282,6 +292,15 @@ static void slave_init(void)
     };
     ESP_ERROR_CHECK(pairing_init(&pairing_config));
     
+    // Initialize Pairing Button (GPIO1)
+    button_config_t pairing_btn_config = {
+        .gpio_num = CONFIG_GPIO_PAIRING_BUTTON,
+        .active_level = true,  // Active high (pull-down, button connects to 3.3V)
+        .long_press_time_ms = CONFIG_PAIRING_LONG_PRESS_TIME,
+        .callback = on_pairing_button,
+    };
+    ESP_ERROR_CHECK(button_init(&pairing_btn_config));
+    
     // Brief LED indication
     led_rgb_set_solid(RGB_COLOR_RED);
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -292,8 +311,11 @@ static void slave_init(void)
     led_rgb_clear();
     led_rgb_refresh();
     
-    ESP_LOGI(TAG, "Slave initialized successfully - Listening for pairing");
+    ESP_LOGI(TAG, "Slave initialized successfully");
+    ESP_LOGI(TAG, "- Pairing button: GPIO%d (long press %d ms)", 
+             CONFIG_GPIO_PAIRING_BUTTON, CONFIG_PAIRING_LONG_PRESS_TIME);
     ESP_LOGI(TAG, "- RGB LED: GPIO%d", CONFIG_GPIO_LED_RGB);
+    ESP_LOGI(TAG, "- Paired: %s", pairing_is_paired() ? "YES" : "NO");
 }
 
 #endif // CONFIG_DEVICE_ROLE_MASTER

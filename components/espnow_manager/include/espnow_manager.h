@@ -22,6 +22,7 @@ typedef enum {
     ESPNOW_MSG_PAIRING_REQUEST,    /*!< Pairing request from slave */
     ESPNOW_MSG_PAIRING_RESPONSE,   /*!< Pairing response from master */
     ESPNOW_MSG_READY,              /*!< Slave ready notification */
+    ESPNOW_MSG_UNPAIR,             /*!< Unpair request from slave */
     ESPNOW_MSG_LED_ON,             /*!< Turn LED on command */
     ESPNOW_MSG_LED_OFF,            /*!< Turn LED off command */
     ESPNOW_MSG_HEARTBEAT,          /*!< Heartbeat message */

@@ -13,11 +13,12 @@ menu "Example Configuration"
     endchoice
 
     config GPIO_PAIRING_BUTTON
-        int "Pairing Button GPIO (Master only)"
+        int "Pairing Button GPIO (Slave only)"
         default 1
-        depends on DEVICE_ROLE_MASTER
+        depends on DEVICE_ROLE_SLAVE
         help
-            GPIO number for the pairing button on the master device.
+            GPIO number for the pairing button on the slave device.
+            Long press to pair with nearby master or unpair from current master.
 
     config GPIO_CONTROL_BUTTON
         int "Control Button GPIO (Master only)"
@@ -45,9 +46,9 @@ menu "Example Configuration"
         int "Pairing Long Press Time (ms)"
         default 3000
         range 1000 10000
-        depends on DEVICE_ROLE_MASTER
+        depends on DEVICE_ROLE_SLAVE
         help
-            Time in milliseconds to hold the pairing button for pairing to initiate.
+            Time in milliseconds to hold the pairing button for pairing/unpairing to initiate.
 
     config PAIRING_CONFIRMATION_DURATION
         int "Pairing Confirmation LED Duration (ms)"

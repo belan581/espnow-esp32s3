@@ -36,6 +36,7 @@ typedef enum {
     PAIRING_EVENT_READY_RECEIVED,    /*!< Ready message received (master) */
     PAIRING_EVENT_COMPLETE,          /*!< Pairing complete */
     PAIRING_EVENT_FAILED,            /*!< Pairing failed */
+    PAIRING_EVENT_UNPAIRED,          /*!< Device unpaired */
 } pairing_event_t;
 
 /**
@@ -80,6 +81,60 @@ esp_err_t pairing_deinit(void);
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t pairing_master_start(void);
+
+/**
+ * @brief Start pairing process (Slave only)
+ * 
+ * Slave initiates pairing by broadcasting a pairing request
+ * 
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t pairing_slave_start(void);
+
+/**
+ * @brief Unpair slave from master (Slave only)
+ * 
+ * Sends unpair message to master and clears local pairing data
+ * 
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t pairing_slave_unpair(void);
+
+/**
+ * @brief Check if device is paired
+ * 
+ * @return true if paired, false otherwise
+ */
+bool pairing_is_paired(void);
+
+/**
+ * @brief Get paired master MAC (Slave only)
+ * 
+ * @param mac_addr Output buffer for master MAC (6 bytes)
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t pairing_get_master_mac(uint8_t *mac_addr);
+
+/**
+ * @brief Load paired devices from NVS
+ * 
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t pairing_load_from_nvs(void);
+
+/**
+ * @brief Save paired devices to NVS
+ * 
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t pairing_save_to_nvs(void);
+
+/**
+ * @brief Clear all pairing data from NVS
+ * 
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t pairing_clear_nvs(void);
 
 /**
  * @brief Handle received ESP-NOW message for pairing
