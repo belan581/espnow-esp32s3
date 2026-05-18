@@ -55,7 +55,8 @@ static void on_espnow_recv(const uint8_t *src_mac, const espnow_message_t *msg)
     // Handle pairing messages
     if (msg->type == ESPNOW_MSG_PAIRING_REQUEST ||
         msg->type == ESPNOW_MSG_PAIRING_RESPONSE ||
-        msg->type == ESPNOW_MSG_READY) {
+        msg->type == ESPNOW_MSG_READY ||
+        msg->type == ESPNOW_MSG_UNPAIR) {
         
         // Pass RSSI from message
         pairing_handle_message(src_mac, msg->type, msg->data, msg->data_len, msg->rssi);
@@ -302,11 +303,7 @@ static void slave_init(void)
     ESP_ERROR_CHECK(button_init(&pairing_btn_config));
     
     // Brief LED indication
-    led_rgb_set_solid(RGB_COLOR_RED);
-    vTaskDelay(pdMS_TO_TICKS(1000));
     led_rgb_set_solid(RGB_COLOR_BLUE);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    led_rgb_set_solid(RGB_COLOR_GREEN);
     vTaskDelay(pdMS_TO_TICKS(1000));
     led_rgb_clear();
     led_rgb_refresh();

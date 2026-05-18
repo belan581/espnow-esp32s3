@@ -97,7 +97,12 @@ esp_err_t pairing_save_to_nvs(void)
             }
         } else {
             // Erase master MAC if not paired
-            nvs_erase_key(nvs_handle, NVS_KEY_MASTER);
+            ret = nvs_erase_key(nvs_handle, NVS_KEY_MASTER);
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Erased master MAC from NVS (unpaired)");
+            } else if (ret == ESP_ERR_NVS_NOT_FOUND) {
+                ESP_LOGD(TAG, "No master MAC in NVS to erase");
+            }
         }
     }
     
@@ -145,9 +150,24 @@ esp_err_t pairing_load_from_nvs(void)
         size_t mac_len = 6;
         ret = nvs_get_blob(nvs_handle, NVS_KEY_MASTER, s_pairing_ctx.master_mac, &mac_len);
         if (ret == ESP_OK && mac_len == 6) {
-            s_pairing_ctx.is_paired = true;
-            espnow_manager_add_peer(s_pairing_ctx.master_mac);
-            ESP_LOGI(TAG, "Loaded master MAC from NVS: "MACSTR, MAC2STR(s_pairing_ctx.master_mac));
+            // Validate MAC is not all zeros
+            bool is_valid_mac = false;
+            for (int i = 0; i < 6; i++) {
+                if (s_pairing_ctx.master_mac[i] != 0) {
+                    is_valid_mac = true;
+                    break;
+                }
+            }
+            
+            if (is_valid_mac) {
+                s_pairing_ctx.is_paired = true;
+                espnow_manager_add_peer(s_pairing_ctx.master_mac);
+                ESP_LOGI(TAG, "Loaded master MAC from NVS: "MACSTR, MAC2STR(s_pairing_ctx.master_mac));
+            } else {
+                s_pairing_ctx.is_paired = false;
+                memset(s_pairing_ctx.master_mac, 0, 6);
+                ESP_LOGW(TAG, "Invalid master MAC in NVS (all zeros), clearing");
+            }
         } else {
             s_pairing_ctx.is_paired = false;
             ESP_LOGI(TAG, "No master in NVS");
@@ -423,6 +443,10 @@ esp_err_t pairing_slave_unpair(void)
     
     ESP_LOGI(TAG, "Slave unpairing from master "MACSTR, MAC2STR(s_pairing_ctx.master_mac));
     
+    // Save master MAC before clearing
+    uint8_t master_mac_backup[6];
+    memcpy(master_mac_backup, s_pairing_ctx.master_mac, 6);
+    
     // Send unpair message to master
     espnow_message_t msg = {
         .type = ESPNOW_MSG_UNPAIR,
@@ -442,6 +466,9 @@ esp_err_t pairing_slave_unpair(void)
     // Save to NVS
     pairing_save_to_nvs();
     
+    // Return to listening state so slave can pair again
+    pairing_set_state(PAIRING_STATE_LISTENING);
+    
     // LED indication
     led_rgb_set_solid(RGB_COLOR_YELLOW);
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -449,7 +476,7 @@ esp_err_t pairing_slave_unpair(void)
     led_rgb_refresh();
     
     if (s_pairing_ctx.callback) {
-        s_pairing_ctx.callback(PAIRING_EVENT_UNPAIRED, s_pairing_ctx.master_mac);
+        s_pairing_ctx.callback(PAIRING_EVENT_UNPAIRED, master_mac_backup);
     }
     
     ESP_LOGI(TAG, "Unpaired successfully");
